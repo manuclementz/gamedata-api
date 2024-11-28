@@ -2,3 +2,4 @@
 .env
 authinfo.txt
 *.sqlite
+__pycache__/

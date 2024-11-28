@@ -13,11 +13,12 @@
       .highlight {
         background-color: var(--pico-primary-background);
         font-weight: bold;
+        border-radius:4px;
       }
       .autocomplete-list {
         height: fit-content;
         overflow-y: auto;
-
+        padding: 0 1rem;
         z-index: 10;
         position: relative;
         width: 100%;
@@ -37,6 +38,7 @@
       .autocomplete-item.active {
         background-color: var(--pico-contrast-background);
         color: var(--pico-contrast-inverse);
+        border-radius:4px;
       }
 
       #search-input {
@@ -90,29 +92,38 @@
             aria-label="Search"
             autocomplete="off"
           />
-
+          <span 
+          x-show="isLoading" 
+          aria-busy="true"
+        >Recherche...</span>
           <input type="hidden" x-model="selectedGameId" name="game_id" />
+          <template x-if="showResults">
+            <ul 
+              x-show="results.length > 0"
+              class="autocomplete-list"
+            >
+              <template x-for="(game, index) in results" :key="game.id">
+                <li
+                  @mousedown.prevent="selectGame(game)"
+                  @mouseover="highlightedIndex = index"
+                  class="autocomplete-item p-2 cursor-pointer hover:bg-gray-100"
+                  :class="{ 'active': index === highlightedIndex }"
+                >
+                  <span x-html="highlightMatchedText(game.name)"></span>
+                  <small
+                    class="text-gray-500 ml-2"
+                    x-text="formatReleaseDate(game.first_release_date)"
+                  ></small>
+                </li>
+              </template>
+            </ul>
+          </template>
 
-          <ul
-            x-show="showResults && results.length > 0"
-            class="autocomplete-list"
-            :class="{ 'hidden': !showResults || results.length === 0 }"
-          >
-            <template x-for="(game, index) in results" :key="game.id">
-              <li
-                @mousedown.prevent="selectGame(game)"
-                @mouseover="highlightedIndex = index"
-                class="autocomplete-item p-2 cursor-pointer hover:bg-gray-100"
-                :class="{ 'active': index === highlightedIndex }"
-              >
-                <span x-html="highlightMatchedText(game.name)"></span>
-                <small
-                  class="text-gray-500 ml-2"
-                  x-text="formatReleaseDate(game.first_release_date)"
-                ></small>
-              </li>
-            </template>
-          </ul>
+          <template x-if="showResults && results.length === 0 && searchQuery.length >= 3">
+            <div class="no-results">
+              No games found for "<span x-text="searchQuery"></span>"
+            </div>
+          </template>
         </div>
       </article>
       <!--
@@ -135,6 +146,7 @@
           results: [],
           highlightedIndex: -1,
           showResults: false,
+          isLoading: false,
 
           init() {
             // Optional initialization
@@ -142,8 +154,7 @@
 
           async search() {
             console.log("search");
-            this.searchQuery = this.displayValue;
-
+            this.searchQuery = this.displayValue;            
             if (this.searchQuery.length < 3) {
               this.results = [];
               this.showResults = false;
@@ -152,12 +163,15 @@
             }
 
             try {
+              this.isLoading = true;
+              let query = this.searchQuery.replace(/\s*\(.*$/, '');
               const response = await fetch(
-                `/api/search?q=${encodeURIComponent(this.searchQuery)}&limit=10`
+                `/api/search?q=${encodeURIComponent(query)}&limit=10`
               );
               this.results = await response.json();
               this.highlightedIndex = 0;
               this.showResults = true;
+              this.isLoading = false;
             } catch (error) {
               console.error("Search failed:", error);
               this.results = [];
