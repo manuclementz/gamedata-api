@@ -153,7 +153,7 @@
 
             try {
               const response = await fetch(
-                `/api/games?q=${encodeURIComponent(this.searchQuery)}&limit=10`
+                `/api/search?q=${encodeURIComponent(this.searchQuery)}&limit=10`
               );
               this.results = await response.json();
               this.highlightedIndex = 0;
