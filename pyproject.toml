@@ -10,7 +10,7 @@ python = "^3.12"
 requests = "^2.32.3"
 flask = "^3.1.0"
 python-decouple = "^3.8"
-waitress = "^3.0.2"
+gunicorn = "^23.0.0"
 
 
 [build-system]
