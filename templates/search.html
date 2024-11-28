@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Search Autocomplete</title>
+    <script src="https://unpkg.com/alpinejs@3.13.0" defer></script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.slate.min.css"
+    />
+    <style>
+      .highlight {
+        background-color: var(--pico-primary-background);
+        font-weight: bold;
+      }
+      .autocomplete-list {
+        height: fit-content;
+        overflow-y: auto;
+
+        z-index: 10;
+        position: relative;
+        width: 100%;
+        transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+      }
+      .autocomplete-list.hidden {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+      }
+      .autocomplete-item {
+        transition: background-color 0.1s ease;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .autocomplete-item.active {
+        background-color: var(--pico-contrast-background);
+        color: var(--pico-contrast-inverse);
+      }
+
+      #search-input {
+        margin-bottom: 0;
+      }
+
+      .offcanvas {
+        position: relative;
+      }
+
+      .offcanvas-content {
+        position: fixed;
+        left: 0;
+        bottom: -100%;
+        width: 100%;
+        height: 50vh;
+        background-color: var(--pico-background-color);
+        box-shadow: var(--pico-box-shadow);
+        transition: bottom 0.3s ease-in-out;
+      }
+
+      .offcanvas-content.show {
+        bottom: 0;
+      }
+
+      .offcanvas-content .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <article>
+        <div x-data="gameAutocomplete()" x-init="init()" class="relative">
+          <input
+            id="search-input"
+            type="search"
+            x-model="displayValue"
+            @input.debounce.300ms="search"
+            @keydown.down.prevent="highlightNext"
+            @keydown.up.prevent="highlightPrevious"
+            @keydown.enter.prevent="selectHighlighted"
+            @keydown.escape="closeResults"
+            @focus="showResults = true"
+            placeholder="Search..."
+            aria-label="Search"
+            autocomplete="off"
+          />
+
+          <input type="hidden" x-model="selectedGameId" name="game_id" />
+
+          <ul
+            x-show="showResults && results.length > 0"
+            class="autocomplete-list"
+            :class="{ 'hidden': !showResults || results.length === 0 }"
+          >
+            <template x-for="(game, index) in results" :key="game.id">
+              <li
+                @mousedown.prevent="selectGame(game)"
+                @mouseover="highlightedIndex = index"
+                class="autocomplete-item p-2 cursor-pointer hover:bg-gray-100"
+                :class="{ 'active': index === highlightedIndex }"
+              >
+                <span x-html="highlightMatchedText(game.name)"></span>
+                <small
+                  class="text-gray-500 ml-2"
+                  x-text="formatReleaseDate(game.first_release_date)"
+                ></small>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </article>
+      <!--
+        <div class="offcanvas" x-data="{ open: false }" @click.away="open = false">
+            <button class="btn" @click="open = !open">Toggle Offcanvas</button>
+          
+            <div class="offcanvas-content" :class="{ 'show': open }">
+              <button class="btn close-btn" @click="open = false">&times;</button>
+
+            </div>
+          </div>-->
+    </main>
+
+    <script>
+      function gameAutocomplete() {
+        return {
+          searchQuery: "",
+          displayValue: "",
+          selectedGameId: null,
+          results: [],
+          highlightedIndex: -1,
+          showResults: false,
+
+          init() {
+            // Optional initialization
+          },
+
+          async search() {
+            console.log("search");
+            this.searchQuery = this.displayValue;
+
+            if (this.searchQuery.length < 3) {
+              this.results = [];
+              this.showResults = false;
+              this.selectGameId = null;
+              return;
+            }
+
+            try {
+              const response = await fetch(
+                `/api/games?q=${encodeURIComponent(this.searchQuery)}&limit=10`
+              );
+              this.results = await response.json();
+              this.highlightedIndex = 0;
+              this.showResults = true;
+            } catch (error) {
+              console.error("Search failed:", error);
+              this.results = [];
+              this.showResults = false;
+            }
+          },
+
+          selectGame(game) {
+            this.selectedGameId = game.id;
+            this.displayValue = `${game.name} (${this.formatReleaseDate(
+              game.first_release_date
+            )})`;
+            this.showResults = false;
+            this.results = [];
+          },
+
+          highlightMatchedText(text) {
+            if (!this.searchQuery) return text;
+            const groups = [
+              this.searchQuery,
+              ...this.searchQuery.split(/\s+/),
+            ].filter((word) => word.trim() !== "");
+            const matchedWords = new Set();
+            const escapedGroups = groups.map((group) =>
+              this.escapeRegExp(group)
+            );
+            const regex = new RegExp(
+              `(${escapedGroups.join("|")})(\\s*)`,
+              "gi"
+            );
+            return text.replace(regex, (fullMatch, wordGroup, spaceAfter) => {
+              const lowercaseWordGroup = wordGroup.toLowerCase();
+
+              if (!matchedWords.has(lowercaseWordGroup)) {
+                matchedWords.add(lowercaseWordGroup);
+                return `<span class="highlight">${wordGroup}</span>${spaceAfter}`;
+              }
+
+              return fullMatch;
+            });
+          },
+
+          escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          },
+
+          highlightNext() {
+            if (this.results.length === 0) return;
+
+            this.highlightedIndex =
+              (this.highlightedIndex + 1) % this.results.length;
+          },
+
+          highlightPrevious() {
+            if (this.results.length === 0) return;
+
+            this.highlightedIndex =
+              (this.highlightedIndex - 1 + this.results.length) %
+              this.results.length;
+          },
+
+          selectHighlighted() {
+            if (this.highlightedIndex !== -1 && this.results.length > 0) {
+              this.selectGame(this.results[this.highlightedIndex]);
+            }
+          },
+
+          closeResults() {
+            this.showResults = false;
+            this.results = [];
+          },
+
+          formatReleaseDate(timestamp) {
+            return timestamp ? new Date(timestamp * 1000).getFullYear() : "";
+          },
+
+          clearSearch() {
+            this.displayValue = "";
+            this.selectedGameId = null;
+            this.results = [];
+            this.showResults = false;
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

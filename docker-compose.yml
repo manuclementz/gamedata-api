@@ -1,0 +1,13 @@
+services:
+    gamedata-api:
+      image: gamedata-api
+      env_file:
+        - .env
+      volumes:
+        - ~/data/gamedata-api/data:/app/data
+      build:
+        context: .
+        dockerfile: ./Dockerfile
+      ports:
+        - 127.0.0.1:9000:8000
+
